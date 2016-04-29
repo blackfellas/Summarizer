@@ -1,2 +1,1 @@
-# Summarizer
-based on the sumy repo
+# summarizer-BF
