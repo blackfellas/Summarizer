@@ -8,8 +8,8 @@ From the python console:
 
 Install punkt.zip:
 
-    `import nltk`
+    import nltk
     
-    `nltk.download('punkt')` 
+    nltk.download('punkt')
 
 Or if running on Heroku, make sure to extract `nltk_data.zip` or `punkt.zip`
