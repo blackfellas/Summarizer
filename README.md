@@ -4,7 +4,7 @@ Python 2.7
 
 Using pip, install the modules in `requirements.txt`
 
-In the python cons
+From the python console:
 
 Install punkt.zip:
     `import nltk`
