@@ -1,5 +1,4 @@
 praw
-
 goose-extractor
 psycopg2
 sumy
