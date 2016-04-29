@@ -79,6 +79,7 @@ def summary(s, length, LANGUAGE):
     meta = article.meta_description
     compression = 100
     
+    #check if Goose has failed to extract text:
     if len(text) <= len(meta):
         print ('  using Breadability')   
         #parser = HtmlParser.from_url(s.url, Tokenizer(LANGUAGE))
