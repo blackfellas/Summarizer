@@ -39,15 +39,18 @@ print (int(timestamp(now)))
 
 #blacklist ((or regex) to ignore
 #s - submission
-def blacklist(b_list, s):    
-    if s.domain.lower() == 'self.' + str(s.subreddit.display_name).lower():
+def blacklist(b_list, s):
+    domain = s.domain.lower()
+    subreddit = 'self.' + str(s.subreddit.display_name).lower()  
+    if domain == subreddit:
         return True
-    #convert string to list items
-    b_list = b_list.split('\n')    
+    
+    #convert string to list items    
+    b_list = b_list.split('\r\n') 
     for regex in b_list:
         pattern = re.compile(regex, re.UNICODE|re.IGNORECASE)
-        if pattern.search(s.domain):
-            print('  regex match: ', pattern.search(s.domain).group(0))
+        if pattern.search(domain):
+            print('  regex match: ', domain)
             return True
     return False
 
@@ -79,7 +82,6 @@ def summary(s, length, LANGUAGE):
     meta = article.meta_description
     compression = 100
     
-    #check if Goose has failed to extract text:
     if len(text) <= len(meta):
         print ('  using Breadability')   
         #parser = HtmlParser.from_url(s.url, Tokenizer(LANGUAGE))
@@ -119,7 +121,7 @@ def main():
     r = None
     cfg_file = SafeConfigParser()
     path_to_cfg = os.path.abspath(os.path.dirname(sys.argv[0]))
-    path_to_sch = os.path.join(path_to_cfg, 'settings.cfg')
+    path_to_sch = os.path.join(path_to_cfg, 'schedulebot.cfg')
     cfg_file.read(path_to_sch)
     r = login()
     bot = r.get_redditor(cfg_file.get('reddit', 'username'))
