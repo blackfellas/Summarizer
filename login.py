@@ -8,7 +8,7 @@ from ConfigParser import SafeConfigParser
 r = None
 cfg_file = SafeConfigParser()
 path_to_cfg = os.path.abspath(os.path.dirname(sys.argv[0]))
-path_to_cfg = os.path.join(path_to_cfg, 'schedulebot.cfg')
+path_to_cfg = os.path.join(path_to_cfg, 'settings.cfg')
 cfg_file.read(path_to_cfg)
 
 def login():
