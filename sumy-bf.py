@@ -5,6 +5,7 @@ from __future__ import division, print_function, unicode_literals
 
 from goose import Goose
 from sumy.parsers.plaintext import PlaintextParser
+from sumy.parsers.html import HtmlParser
 from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.lsa import LsaSummarizer as Summarizer
 from sumy.nlp.stemmers import Stemmer
@@ -48,9 +49,12 @@ def blacklist(b_list, s):
     #convert string to list items    
     b_list = b_list.split('\r\n') 
     for regex in b_list:
+        regex = regex.strip()
+        if regex == '':
+            continue
         pattern = re.compile(regex, re.UNICODE|re.IGNORECASE)
         if pattern.search(domain):
-            print('  regex match: ', domain)
+            print('  regex match: ', regex, '|', domain)
             return True
     return False
 
@@ -77,25 +81,27 @@ def summary(s, length, LANGUAGE):
     
 
     g = Goose()
-    article = g.extract(raw_html=raw_html)
-    text = article.cleaned_text
-    meta = article.meta_description
+    meta = g.extract(raw_html=raw_html).meta_description
+    raw_article = str(Article(raw_html))
     compression = 100
     
-    if len(text) <= len(meta):
-        print ('  using Breadability')   
-        #parser = HtmlParser.from_url(s.url, Tokenizer(LANGUAGE))
-        #Using Breadability but retain meta_description from Goose
-        article = g.extract(raw_html=str(Article(raw_html)))
-        text = article.cleaned_text
-      
-        
-    parser = PlaintextParser(text, Tokenizer(LANGUAGE))    
-    LANGUAGE = LANGUAGE.lower()
-    stemmer = Stemmer(LANGUAGE)
+    #Breadability+Goose for cleaner text?
+    article = g.extract(raw_html=raw_article)
+    text = article.cleaned_text      
     
+    language = LANGUAGE.lower()
+    stemmer = Stemmer(language)
     summarizer = Summarizer(stemmer)
-    summarizer.stop_words = get_stop_words(LANGUAGE)
+    summarizer.stop_words = get_stop_words(language)
+    
+    #choose parser
+    if len(text) == 0 or len(text) < len(meta):
+        print('  ...using HTML parser')
+        text = raw_article
+        parser = HtmlParser(text, Tokenizer(language))
+    else:
+        parser = PlaintextParser(text, Tokenizer(language))    
+    
     short = []
     line = str()
     for sentence in summarizer(parser.document, length):
@@ -111,7 +117,7 @@ def summary(s, length, LANGUAGE):
         print(' ', e)
     extract = '{0}\n\n---\n{1}'.format(meta, extract)
     #print (extract.encode('utf-8'), compression, '%')
-    print ('  to', extract.count(' '), 'words;', compression, 'percent:')
+    print('  from {0} words to {1} words ({2}%)'.format(text.count(' '), extract.count(' '), compression))
     return extract, compression
     
     
@@ -174,13 +180,19 @@ def main():
             try:                
                 result = summary(s, length, language)
 
-                if result[1] > 66:
+                if result[1] > 50:
                     print ('  Big Summary:', result[0].encode('utf-8'))
+                    continue
+                if len(result[0]) < 300:
+                    print ('  Too short!')
                     continue
                 print ('\n\n')
                 print (' ', s.title, '-', s.domain, result[1], '%')
                 print (' ', result[0].encode('utf-8'))
-                more = '\n\n---\n\n[**more here...**]({0} "Compressed to {1}% of original - click to read the full article") ^(*I\'m just a bot*)'.format(s.url, result[1])
+                url = s.url
+                url = url.replace('(', '\(')
+                url = url.replace(')', '\)')
+                more = '\n\n---\n\n[**more here...**]({0} "Compressed to {1}% of original - click to read the full article") ^(*I\'m just a bot*)'.format(url, result[1])
                 print (more)
                 
                 try:
