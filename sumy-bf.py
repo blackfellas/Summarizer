@@ -138,7 +138,6 @@ def visited(s, bot):
     try:
         for comment in s.comments:
             if comment.author == bot and comment.is_root:
-                print ('  Not doing this again')
                 return True 
     except Exception as e:
         print(e)
@@ -278,15 +277,18 @@ def main():
             print ('\n\n', s.url)
             if s.created_utc <= last_run:
                 print ('  reached end of last run')
-                break
-            else:
                 #store update time
                 new_run = int(timestamp(now))
+                break
+
             if blacklist(b_list, e_list, s):
                 print ('  blacklisted')
                 continue
+            
             if visited(s, bot):
-                continue
+                print ('  already visited')
+                new_run = int(timestamp(now))
+                break
             try:                
                 result = summary(s, length, language)
                 meta, extract, compression = result
@@ -335,7 +337,7 @@ def main():
         #check if unchanged
         print('\n---\n ', processed, 'article(s) summarized')
         if last_run == new_run: 
-            print ('  no more new posts!')
+            print ('  unchanged since last ran')
         last_run = new_run    
         cur.execute("update summarize set last_run = %s where subreddit = %s", (last_run, sub[0]))
         cur.execute("update summarize set excluded = %s where subreddit = %s", (e_list, sub[0]))
