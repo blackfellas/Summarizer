@@ -277,8 +277,8 @@ def main():
             #http error 429
             print ('\n\n', s.url)
             if s.created_utc <= last_run:
-                print ('  not recent')
-                continue
+                print ('  reached end of last run')
+                break
             else:
                 #store update time
                 new_run = int(timestamp(now))
