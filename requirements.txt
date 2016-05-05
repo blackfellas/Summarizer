@@ -1,6 +1,6 @@
-praw
-goose-extractor
-urllib3
-psycopg2
-sumy
-numpy
+praw==3.4.0
+goose-extractor==1.0.25
+urllib3==1.15.1
+psycopg2==2.6.1
+sumy==0.4.1
+numpy==1.10.4
