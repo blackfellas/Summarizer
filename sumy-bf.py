@@ -64,8 +64,7 @@ def ProcessMessages(bot, last_message):
                     print ('  new blacklist message in: ', sub) 
                     #tuple (blacklist: subreddit as subject, site as body)
                     blacklist.append((sub.lower(), message.body.strip().lower()))
-                continue
-            
+                continue           
             if message.subject.strip().lower() == 'delete':
                 new_messages += 1
                 #obtain a list of ids in comments
@@ -87,7 +86,6 @@ def ProcessMessages(bot, last_message):
                         processed += 1
                     except: #deleted comment probably
                         continue
-                        
         print('  new_messages: ' + str(new_messages))
         print('  deleted: ' + str(processed))
     except Exception as e:
@@ -135,8 +133,7 @@ def visited(s, bot):
                 return True 
     except Exception as e:
         print(e)
-        return True
-        
+        return True        
     return False
 
 def check_comment_votes(bot):
@@ -148,8 +145,7 @@ def check_comment_votes(bot):
                 try: #
                     c.remove()
                 except:
-                    c.delete()
-                    
+                    c.delete()                   
         except: #score hidden
             pass        
 
@@ -169,7 +165,6 @@ def summary(url, length, LANGUAGE):
             raw_html = response.data.decode('utf-8')
         except Exception as e:
             return e
-        
 
     g = Goose()
     meta = g.extract(raw_html=raw_html).meta_description
@@ -177,16 +172,13 @@ def summary(url, length, LANGUAGE):
     text = article.cleaned_text
     word_count = len(text.split())
     compression = 100
-         
-    
+            
     language = LANGUAGE.lower()
     stemmer = Stemmer(language)
     summarizer = Summarizer(stemmer)
     summarizer.stop_words = get_stop_words(language) 
     parser = PlaintextParser(text, Tokenizer(language))    
     
-    
-
     short = []
     line = str()
     if word_count >= 500:
@@ -196,7 +188,6 @@ def summary(url, length, LANGUAGE):
         line = line.replace("`", "\'")
         line = line.replace("#", "\#")
         short.append(line)        
-
     extract = '\n'.join(short)
     try:
         compression = int((extract.count(' ')/word_count)*100)
@@ -209,7 +200,6 @@ def summary(url, length, LANGUAGE):
 
 
 def main():
-
     bot = r.get_me()
     
     # connect to db and get data
@@ -221,9 +211,7 @@ def main():
     last_message = cur.fetchone()[0]
     #reset if empty
     if not last_message:
-        last_message = 0
-    
-    
+        last_message = 0   
     print('  checking inbox...')
     now = datetime.utcnow()
     #check delete messages
@@ -239,8 +227,7 @@ def main():
         # do the subs from the db table
         print ('\nProcessing', sub[0], '...')
         now = datetime.utcnow()
-        current_sub = r.get_subreddit(sub[0])
-        
+        current_sub = r.get_subreddit(sub[0])        
         #database table summarize
         length = sub[1] #number of keypoints in summary
         b_list = sub[2] #blacklisted websites
@@ -256,7 +243,6 @@ def main():
         print ('  last run:', new_run)
         processed = 0
         
-
         #unsubscribe list
         e_list = e_list.split() if e_list else []
         for unsubs in excluded:
@@ -264,8 +250,7 @@ def main():
             if unsubs[1] == sub[0].lower():
                 e_list.append(unsubs[0])
         e_list = set(e_list)
-        e_list = '\r\n'.join(e_list)
-        
+        e_list = '\r\n'.join(e_list)      
         #blacklist        
         b_list = b_list.split() if b_list else []
         for site in black_list:
@@ -281,8 +266,7 @@ def main():
         except Exception as h:
             print('Ugh! Reddit', h)
             sleep(60)
-            continue
-        
+            continue       
         for s in submissions:
             #http error 429
             url = s.url
@@ -294,12 +278,10 @@ def main():
                 break
             #give a fellow bot a fist 
             if s.author.name.lower() == 'automoderator':
-                    s.vote(1)
-                
+                    s.vote(1)               
             if blacklist(b_list, e_list, s):
                 print ('  blacklisted')
-                continue
-            
+                continue           
             if visited(s, bot):
                 print ('  already visited')
                 break
@@ -317,8 +299,7 @@ def main():
                 #check extracted text length
                 if len(extract.split()) < 120:
                     print ('  Too short!')
-                    continue
-                
+                    continue              
                 #formatting for reddit markup, add meta description
                 extract = '{0}\n\n---\n{1}'.format(meta, extract)
                 print ('\n')
@@ -330,8 +311,7 @@ def main():
                 url = url.replace('(', '\(')
                 url = url.replace(')', '\)')
                 more = '\n\n[**more here...**]({0} "Compressed to {1}% of original - click to read the full article")\n\n---\n\n'.format(url, compression)
-                print (more)
-                
+                print (more)                
                 try:
                      post = s.add_comment(extract + more)
                      comment_id = 't1_' + post.id
@@ -343,12 +323,10 @@ def main():
                      processed += 1    
                 except Exception as e:
                     print('  ' + str(e))
-                    continue
-                   
+                    continue                  
             except Exception as e:
-                print ('  error:' + str(e))
-                continue
-            
+                print (' Possible urllib3 HTTP error:' + str(e))
+                continue            
         #check if unchanged
         print('\n---\n ', processed, 'article(s) summarized')
         if last_run == new_run: 
@@ -357,8 +335,7 @@ def main():
         cur.execute("update summarize set last_run = %s where subreddit = %s", (last_run, sub[0]))
         cur.execute("update summarize set excluded = %s where subreddit = %s", (e_list, sub[0]))
         cur.execute("update summarize set blacklist = %s where subreddit = %s", (b_list, sub[0]))
-        cur.execute("update summarize set last_message = %s where subreddit = %s", (last_message, sub[0]))
-        
+        cur.execute("update summarize set last_message = %s where subreddit = %s", (last_message, sub[0]))      
     cur.close()
     session.commit()
     
