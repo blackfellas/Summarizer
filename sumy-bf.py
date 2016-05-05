@@ -19,8 +19,8 @@ from time import sleep
 
 from login import login, conn
 
-import math
 from math import log
+
 #convert time to unix time
 def timestamp(dt, unix=datetime(1970,1,1)):
     td = dt - unix
@@ -104,7 +104,7 @@ def blacklist(b_list, e_list, s):
         return True
     
     #convert string to list items
-    b_list = b_list.split('\r\n') if b_list else []
+    b_list = b_list.split() if b_list else []
     for regex in b_list:
         regex = regex.strip()
         if regex == '':
@@ -114,7 +114,7 @@ def blacklist(b_list, e_list, s):
             print('  regex match: ', pattern.search(s.domain).group(0))
             return True
     
-    e_list = e_list.split('\r\n') if e_list else []
+    e_list = e_list.split() if e_list else []
     for user in e_list:
         if not user:
             continue
@@ -136,7 +136,20 @@ def visited(s, bot):
         return True
         
     return False
-    
+
+def check_comment_votes(bot):
+    comments = bot.get_comments(sort='new', time='all')
+    for c in comments:
+        try:
+            if c.score < 0:
+                print ('  removing downvoted comment ' + c.id )
+                try: #
+                    c.remove()
+                except:
+                    c.delete()
+                    
+        except: #score hidden
+            pass        
 
 def summary(url, length, LANGUAGE):
     #cookie handling websites like NYT
@@ -164,19 +177,15 @@ def summary(url, length, LANGUAGE):
     language = LANGUAGE.lower()
     stemmer = Stemmer(language)
     summarizer = Summarizer(stemmer)
-    summarizer.stop_words = get_stop_words(language)
-    
+    summarizer.stop_words = get_stop_words(language) 
     parser = PlaintextParser(text, Tokenizer(language))    
     
     
 
     short = []
     line = str()
-    try:
-        length = (length + int(round(log(word_count/400, math.e))))
-        length = length if length >1 else 1
-    except:
-        pass
+    if word_count >= 500:
+        length = length + int(log(word_count/100))
     for sentence in summarizer(parser.document, length):
         line = '>* {0}'.format(str(sentence).decode('utf-8'))
         line = line.replace("`", "\'")
@@ -192,19 +201,7 @@ def summary(url, length, LANGUAGE):
     print('  from {0} words to {1} words ({2}%)'.format(word_count, len(extract.split()), compression))
     return (meta, extract, compression)
     
-def check_comment_votes(bot):
-    comments = bot.get_comments(sort='new', time='all')
-    for c in comments:
-        try:
-            if c.score < 0:
-                print ('  removing downvoted comment ' + c.id )
-                try: #
-                    c.remove()
-                except:
-                    c.delete()
-                    
-        except: #score hidden
-            pass    
+
 
 def main():
 
@@ -245,14 +242,17 @@ def main():
         language = sub[3] #english
         e_list = sub[4] #unsubscribed/excluded users
         last_run = sub[5] #time last active
+        LIMIT = sub[8] #number of submissions to fetch
+        
         last_time = datetime.fromtimestamp(last_run).strftime('%Y-%m-%d %H:%M:%S')
         print ('  last ran: '+ last_time)
         new_run = last_run
+        print ('  last run:', new_run)
         processed = 0
         
 
         #unsubscribe list
-        e_list = e_list.split('\r\n') if e_list else []
+        e_list = e_list.split() if e_list else []
         for unsubs in excluded:
         #(subject as unsubscribe, body as subreddit)
             if unsubs[1] == sub[0].lower():
@@ -261,7 +261,7 @@ def main():
         e_list = '\r\n'.join(e_list)
         
         #blacklist        
-        b_list = b_list.split('\r\n') if b_list else []
+        b_list = b_list.split() if b_list else []
         for site in black_list:
         #(subreddit in subject, body as  site)
             in_sub = site[0]
@@ -271,7 +271,7 @@ def main():
         b_list = '\r\n'.join(b_list)        
   
         try:
-            submissions = current_sub.get_new(limit=15, fetch=True)
+            submissions = current_sub.get_new(limit=LIMIT, fetch=True)
         except Exception as h:
             print('Ugh! Reddit', h)
             sleep(60)
@@ -281,10 +281,10 @@ def main():
             #http error 429
             url = s.url
             print ('\n\n', url)
+            #store update time
+            new_run = int(s.created_utc) if s.created_utc > new_run else new_run
             if s.created_utc <= last_run:
                 print ('  reached end of last run')
-                #store update time
-                new_run = int(s.created_utc)
                 break
             #give a fellow bot a fist 
             if s.author.name.lower() == 'automoderator':
@@ -296,7 +296,6 @@ def main():
             
             if visited(s, bot):
                 print ('  already visited')
-                new_run = int(s.created_utc)
                 break
             try:                
                 result = summary(url, length, language)
@@ -306,7 +305,7 @@ def main():
                     print ('  Big Summary:\n', extract.encode('utf-8'))
                     continue
                 #check extracted text length
-                if len(extract) < 300:
+                if len(extract.split()) < 120:
                     print ('  Too short!')
                     continue
                 
@@ -315,6 +314,7 @@ def main():
                 print ('\n')
                 print (' ', s.title, '-', s.domain)
                 print (' ', extract.encode('utf-8'))
+                print('====================================================')
                 #more reddit mark up
                 url = s.url
                 url = url.replace('(', '\(')

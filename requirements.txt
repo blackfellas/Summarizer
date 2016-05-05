@@ -1,5 +1,7 @@
 praw
+
 goose-extractor
+urllib3
 psycopg2
 sumy
 numpy
