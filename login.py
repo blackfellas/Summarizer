@@ -40,7 +40,7 @@ def conn():
     
     try:    
         con = psycopg2.connect(database=dbname, user=dbuser, password=dbpassword, host=dbhost)
-        print('  connected to database:' + dbname)
+        print('connected to database: ' + dbname)
         return con
     except Exception as e:
         logging.error(e)
