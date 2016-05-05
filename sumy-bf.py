@@ -21,14 +21,6 @@ from login import login, conn
 
 from math import log
 
-#convert time to unix time
-def timestamp(dt, unix=datetime(1970,1,1)):
-    td = dt - unix
-    # return td.total_seconds()
-    return (td.microseconds + (td.seconds + td.days * 86400) * 10**6) / 10**6 
-
-now = datetime.utcnow()
-print (now)
 
 
 #start global reddit session
@@ -36,6 +28,16 @@ global r
 r = None
 r = login()
 session = conn()
+
+#convert time to unix time
+def timestamp(dt, unix=datetime(1970,1,1)):
+    td = dt - unix
+    # return td.total_seconds()
+    return (td.microseconds + (td.seconds + td.days * 86400) * 10**6) / 10**6 
+
+
+print (datetime.utcnow())
+
 
 def ProcessMessages(bot, last_message):
     #look for thing_id to delete
@@ -236,12 +238,13 @@ def main():
         now = datetime.utcnow()
         current_sub = r.get_subreddit(sub[0])
         
-        #database table 
+        #database table summarize
         length = sub[1] #number of keypoints in summary
         b_list = sub[2] #blacklisted websites
         language = sub[3] #english
         e_list = sub[4] #unsubscribed/excluded users
         last_run = sub[5] #time last active
+        #algorithm = sub[6]
         LIMIT = sub[8] #number of submissions to fetch
         
         last_time = datetime.fromtimestamp(last_run).strftime('%Y-%m-%d %H:%M:%S')
