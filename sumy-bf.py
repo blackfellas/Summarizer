@@ -155,18 +155,21 @@ def check_comment_votes(bot):
 
 def summary(url, length, LANGUAGE):
     #cookie handling websites like NYT
+    e = None
     try:
-        
-        http = urllib3.PoolManager()
-        response = http.request('GET', url)
-        response = http.urlopen('GET', url)
-        raw_html = response.data.decode('utf-8')
-                
-    except:
         cj = cookielib.CookieJar()
         opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))  
         response = opener.open(url)
-        raw_html = response.read() 
+        raw_html = response.read()    
+    #403 errors...    
+    except Exception as e:     
+        try:
+            http = urllib3.PoolManager()
+            response = http.urlopen('GET', url)
+            raw_html = response.data.decode('utf-8')
+        except Exception as e:
+            return e
+        
 
     g = Goose()
     meta = g.extract(raw_html=raw_html).meta_description
@@ -201,7 +204,7 @@ def summary(url, length, LANGUAGE):
     except:
         pass
     print('  from {0} words to {1} words ({2}%)'.format(word_count, len(extract.split()), compression))
-    return (meta, extract, compression)
+    return (meta, extract, compression, e)
     
 
 
@@ -302,7 +305,11 @@ def main():
                 break
             try:                
                 result = summary(url, length, language)
-                meta, extract, compression = result
+                meta, extract, compression, e = result
+                if hasattr(e, 'code'):
+                    if e.code == 404:
+                        s.set_flair(flair_text='404: dead link')
+                        continue
                 #check compression
                 if compression > 60:
                     print ('  Big Summary:\n', extract.encode('utf-8'))
@@ -335,16 +342,11 @@ def main():
                      post.edit(post.body + msg_1 + msg_2 + msg_3 + msg_4)
                      processed += 1    
                 except Exception as e:
-                    print(e)
+                    print('  ' + str(e))
                     continue
                    
             except Exception as e:
-                if hasattr(e, 'code'):
-                    if e.code == 404:
-                        print ('  404: dead link')
-                        s.set_flair(flair_css_class='current', flair_text='404: dead link')
-                else:
-                    print(' ',e)
+                print ('  error:' + str(e))
                 continue
             
         #check if unchanged
