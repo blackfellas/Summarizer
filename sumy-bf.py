@@ -6,23 +6,18 @@ from __future__ import division, print_function, unicode_literals
 
 from goose import Goose
 from sumy.parsers.plaintext import PlaintextParser
-from sumy.parsers.html import HtmlParser
 from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.lsa import LsaSummarizer as Summarizer
 from sumy.nlp.stemmers import Stemmer
 from sumy.utils import get_stop_words
 
+import urllib3, urllib2, cookielib
+import re
 
-import urllib2
-from breadability.readable import Article
-
-
-import os, sys, re
 from datetime import datetime
 from time import sleep
 
 from login import login, conn
-from ConfigParser import SafeConfigParser
 
 import math
 from math import log
@@ -39,10 +34,6 @@ print (now)
 #start global reddit session
 global r
 r = None
-cfg_file = SafeConfigParser()
-path_to_cfg = os.path.abspath(os.path.dirname(sys.argv[0]))
-path_to_sch = os.path.join(path_to_cfg, 'cred.cfg')
-cfg_file.read(path_to_sch)
 r = login()
 session = conn()
 
@@ -72,6 +63,7 @@ def ProcessMessages(bot, last_message):
                     #tuple (blacklist: subreddit as subject, site as body)
                     blacklist.append((sub.lower(), message.body.strip().lower()))
                 continue
+            
             if message.subject.strip().lower() == 'delete':
                 new_messages += 1
                 #obtain a list of ids in comments
@@ -146,41 +138,45 @@ def visited(s, bot):
     return False
     
 
-def summary(s, length, LANGUAGE):
+def summary(url, length, LANGUAGE):
     #cookie handling websites like NYT
-    opener = urllib2.build_opener(urllib2.HTTPCookieProcessor())  
-    response = opener.open(s.url)
-    raw_html = response.read()
-    
+    try:
+        
+        http = urllib3.PoolManager()
+        response = http.request('GET', url)
+        response = http.urlopen('GET', url)
+        raw_html = response.data.decode('utf-8')
+                
+    except:
+        cj = cookielib.CookieJar()
+        opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))  
+        response = opener.open(url)
+        raw_html = response.read() 
 
     g = Goose()
     meta = g.extract(raw_html=raw_html).meta_description
-    raw_article = str(Article(raw_html))
+    article = g.extract(raw_html=raw_html)
+    text = article.cleaned_text
+    word_count = len(text.split())
     compression = 100
-    
-    #Breadability+Goose for cleaner text?
-    article = g.extract(raw_html=raw_article)
-    text = article.cleaned_text      
+         
     
     language = LANGUAGE.lower()
     stemmer = Stemmer(language)
     summarizer = Summarizer(stemmer)
     summarizer.stop_words = get_stop_words(language)
     
-    #choose parser
-    if len(text) == 0 or len(text) < len(meta):
-        print('  ...using HTML parser')
-        text = raw_article
-        parser = HtmlParser(text, Tokenizer(language))
-    else:
-        parser = PlaintextParser(text, Tokenizer(language))    
+    parser = PlaintextParser(text, Tokenizer(language))    
     
-    word_count = text.count(' ')
+    
 
     short = []
     line = str()
-    length = length + int(round(log(word_count/250, math.e)))
-    length = abs(length)
+    try:
+        length = (length + int(round(log(word_count/400, math.e))))
+        length = length if length >1 else 1
+    except:
+        pass
     for sentence in summarizer(parser.document, length):
         line = '>* {0}'.format(str(sentence).decode('utf-8'))
         line = line.replace("`", "\'")
@@ -191,19 +187,28 @@ def summary(s, length, LANGUAGE):
     try:
         compression = int((extract.count(' ')/word_count)*100)
         print(" ", len(text), 'chars in text. keypoints:', length)
-    except Exception as e:
-        print(' ', e)
-    #extract = '{0}\n\n---\n{1}'.format(meta, extract)
-    #print (extract.encode('utf-8'), compression, '%')
-    print('  from {0} words to {1} words ({2}%)'.format(word_count, extract.count(' '), compression))
+    except:
+        pass
+    print('  from {0} words to {1} words ({2}%)'.format(word_count, len(extract.split()), compression))
     return (meta, extract, compression)
     
-    
+def check_comment_votes(bot):
+    comments = bot.get_comments(sort='new', time='all')
+    for c in comments:
+        try:
+            if c.score < 0:
+                print ('  removing downvoted comment ' + c.id )
+                try: #
+                    c.remove()
+                except:
+                    c.delete()
+                    
+        except: #score hidden
+            pass    
 
 def main():
 
-    bot = r.get_redditor(cfg_file.get('reddit', 'username'))
-    
+    bot = r.get_me()
     
     # connect to db and get data
     cur = session.cursor()
@@ -274,23 +279,27 @@ def main():
         
         for s in submissions:
             #http error 429
-            print ('\n\n', s.url)
+            url = s.url
+            print ('\n\n', url)
             if s.created_utc <= last_run:
                 print ('  reached end of last run')
                 #store update time
-                new_run = int(timestamp(now))
+                new_run = int(s.created_utc)
                 break
-
+            #give a fellow bot a fist 
+            if s.author.name.lower() == 'automoderator':
+                    s.vote(1)
+                
             if blacklist(b_list, e_list, s):
                 print ('  blacklisted')
                 continue
             
             if visited(s, bot):
                 print ('  already visited')
-                new_run = int(timestamp(now))
+                new_run = int(s.created_utc)
                 break
             try:                
-                result = summary(s, length, language)
+                result = summary(url, length, language)
                 meta, extract, compression = result
                 #check compression
                 if compression > 60:
@@ -310,7 +319,7 @@ def main():
                 url = s.url
                 url = url.replace('(', '\(')
                 url = url.replace(')', '\)')
-                more = '\n\n[^(**more here...**)]({0} "Compressed to {1}% of original - click to read the full article")\n\n---\n\n'.format(url, compression)
+                more = '\n\n[**more here...**]({0} "Compressed to {1}% of original - click to read the full article")\n\n---\n\n'.format(url, compression)
                 print (more)
                 
                 try:
@@ -327,9 +336,10 @@ def main():
                     continue
                    
             except Exception as e:
-                if str(e).lower().strip() == "HTTP Error 404: Not Found".lower():
-                    print ('  404: dead link')
-                    s.set_flair(flair_css_class='current', flair_text='404: dead link')
+                if hasattr(e, 'code'):
+                    if e.code == 404:
+                        print ('  404: dead link')
+                        s.set_flair(flair_css_class='current', flair_text='404: dead link')
                 else:
                     print(' ',e)
                 continue
