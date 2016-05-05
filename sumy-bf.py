@@ -10,18 +10,13 @@ from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.lsa import LsaSummarizer as Summarizer
 from sumy.nlp.stemmers import Stemmer
 from sumy.utils import get_stop_words
-
+from math import log
 import urllib3, urllib2, cookielib
 import re
 
 from datetime import datetime
 from time import sleep
-
 from login import login, conn
-
-from math import log
-
-
 
 #start global reddit session
 global r
