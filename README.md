@@ -1,6 +1,6 @@
 #### summarizer-BF
 
-Running with Python 2.7.11, pip 8.1.1
+Python 2.7.11, pip 8.1.1
 
 Using pip, install the following modules: `pip install -r requirements.txt`
 
