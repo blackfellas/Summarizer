@@ -186,7 +186,7 @@ def summary(url, length, LANGUAGE):
         line = line.replace("#", "\#")
         short.append(line)  
         
-    meta = '[{0}]({1} "image")'.format(meta, source) if image else meta
+    meta = '[{0}]({1} "image")'.format(meta, source) if source else meta
     extract = '\n'.join(short)
     try:
         compression = int((extract.count(' ')/word_count)*100)
