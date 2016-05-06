@@ -31,7 +31,7 @@ def timestamp(dt, unix=datetime(1970,1,1)):
     return (td.microseconds + (td.seconds + td.days * 86400) * 10**6) / 10**6 
 
 
-print (datetime.utcnow())
+print (datetime.utcnow().strftime("%c"))
 
 
 def ProcessMessages(bot, last_message):
@@ -87,8 +87,6 @@ def ProcessMessages(bot, last_message):
         print('  some error:'+ str(e))
     finally:
         return set(unsubscribe), set(blacklist)
-
-
 
 #blacklist ((or regex) to ignore
 #s - submission
@@ -162,8 +160,12 @@ def summary(url, length, LANGUAGE):
             return e
 
     g = Goose()
-    meta = g.extract(raw_html=raw_html).meta_description
     article = g.extract(raw_html=raw_html)
+    meta = article.meta_description if article.meta_description else article.title
+    image = article.top_image
+    if image:
+        pattern = re.compile(r'\S*\.(jpe?g|png|gifv?|tiff)', re.IGNORECASE)
+        source = re.search(pattern, image.src).group(0)
     text = article.cleaned_text
     word_count = len(text.split())
     compression = 100
@@ -182,7 +184,9 @@ def summary(url, length, LANGUAGE):
         line = '>* {0}'.format(str(sentence).decode('utf-8'))
         line = line.replace("`", "\'")
         line = line.replace("#", "\#")
-        short.append(line)        
+        short.append(line)  
+        
+    meta = '[{0}]({1} "image")'.format(meta, source) if image else meta
     extract = '\n'.join(short)
     try:
         compression = int((extract.count(' ')/word_count)*100)
@@ -296,31 +300,31 @@ def main():
                     print ('  Too short!')
                     continue              
                 #formatting for reddit markup, add meta description
-                extract = '{0}\n\n---\n{1}'.format(meta, extract)
+                extract = '{0}\n\n-------------------------------------\n{1}'.format(meta, extract)
                 print ('\n')
                 print (' ', s.title, '-', s.domain)
                 print (' ', extract.encode('utf-8'))
-                print('====================================================')
+                
                 #more reddit mark up
                 url = s.url
                 url = url.replace('(', '\(')
                 url = url.replace(')', '\)')
-                more = '\n\n[**more here...**]({0} "Compressed to {1}% of original - click to read the full article")\n\n---\n\n'.format(url, compression)
-                print (more)                
+                more = '\n\n[**more here...**]({0} "Compressed to {1}% of original - click to read the full article")\n\n-------------------------------------\n\n'.format(url, compression)
+                print('====================================================')             
                 try:
                      post = s.add_comment(extract + more)
                      comment_id = 't1_' + post.id
                      msg_1 = '  [^(delete)](https://www.reddit.com/message/compose/?to={0}&subject=delete&message=comment id\(s\): {1} "submitter can delete this comment")'.format(bot.name, comment_id)
                      msg_2 = ' ^| [^(unsubscribe)](https://www.reddit.com/message/compose/?to={0}&subject=unsubscribe&message={1} "unsubscribe the bot from your posts")'.format(bot.name, sub[0])
                      msg_3 = ' ^| [^(blacklist)](https://www.reddit.com/message/compose/?to={0}&subject=blacklist: {1}&message={2} "blacklist this article\'s website (mods)")'.format(bot.name, sub[0], s.domain)
-                     msg_4 = ' ^| [^(*I\'m just a bot*)](https://github.com/blackfellas/Summarizer)'
+                     msg_4 = ' ^| [^(I\'m just a bot)](https://github.com/blackfellas/Summarizer)'
                      post.edit(post.body + msg_1 + msg_2 + msg_3 + msg_4)
                      processed += 1    
                 except Exception as e:
                     print('  ' + str(e))
                     continue                  
             except Exception as e:
-                print (' Possible urllib3 HTTP error:' + str(e))
+                print (str(e))
                 continue            
         #check if unchanged
         print('\n---\n ', processed, 'article(s) summarized')
