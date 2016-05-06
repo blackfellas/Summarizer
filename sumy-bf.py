@@ -165,10 +165,11 @@ def summary(url, length, LANGUAGE):
     image = article.top_image
     if image:
         pattern = re.compile(r'\S*\.(jpe?g|png|gifv?|tiff)', re.IGNORECASE)
-        match = re.findall(pattern, image.src)
+        match = re.search(pattern, image.src)
         if match:
-            source = match[0]
-    meta = '[{0}]({1} "image")'.format(meta, source) if source else meta
+            source = match.group(0)
+    alt = article.opengraph['description'] if article.opengraph['description'] else "image"
+    meta = '[{0}]({1} "{2}")'.format(meta, source, alt) if source else meta
     text = article.cleaned_text
     word_count = len(text.split())
     compression = 100
