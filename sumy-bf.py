@@ -144,7 +144,7 @@ def check_comment_votes(bot):
 
 def summary(url, length, LANGUAGE):
     #cookie handling websites like NYT
-    e = None
+    source, e = None, None
     try:
         cj = cookielib.CookieJar()
         opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))  
@@ -165,7 +165,10 @@ def summary(url, length, LANGUAGE):
     image = article.top_image
     if image:
         pattern = re.compile(r'\S*\.(jpe?g|png|gifv?|tiff)', re.IGNORECASE)
-        source = re.search(pattern, image.src).group(0)
+        match = re.findall(pattern, image.src)
+        if match:
+            source = match[0]
+    meta = '[{0}]({1} "image")'.format(meta, source) if source else meta
     text = article.cleaned_text
     word_count = len(text.split())
     compression = 100
@@ -186,7 +189,6 @@ def summary(url, length, LANGUAGE):
         line = line.replace("#", "\#")
         short.append(line)  
         
-    meta = '[{0}]({1} "image")'.format(meta, source) if source else meta
     extract = '\n'.join(short)
     try:
         compression = int((extract.count(' ')/word_count)*100)
