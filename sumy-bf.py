@@ -155,7 +155,7 @@ def summary(url, length, LANGUAGE):
         try:
             http = urllib3.PoolManager()
             response = http.urlopen('GET', url)
-            raw_html = response.data.decode('utf-8')
+            raw_html = response.data
         except Exception as e:
             return e
 
@@ -185,12 +185,12 @@ def summary(url, length, LANGUAGE):
     if word_count >= 500:
         length = length + int(log(word_count/100))
     for sentence in summarizer(parser.document, length):
-        line = '>* {0}'.format(str(sentence).decode('utf-8'))
+        line = '>• {0}'.format(str(sentence).decode('utf-8'))
         line = line.replace("`", "\'")
         line = line.replace("#", "\#")
         short.append(line)  
         
-    extract = '\n'.join(short)
+    extract = '\n\n'.join(short)
     try:
         compression = int((extract.count(' ')/word_count)*100)
         print(" ", len(text), 'chars in text. keypoints:', length)
@@ -299,11 +299,11 @@ def main():
                     print ('  Big Summary:\n', extract.encode('utf-8'))
                     continue
                 #check extracted text length
-                if len(extract.split()) < 120:
+                if len(extract.split()) <= 128:
                     print ('  Too short!')
                     continue              
                 #formatting for reddit markup, add meta description
-                extract = '{0}\n\n-------------------------------------\n{1}'.format(meta, extract)
+                extract = '{0}\n\n***\n{1}'.format(meta, extract)
                 print ('\n')
                 print (' ', s.title, '-', s.domain)
                 print (' ', extract.encode('utf-8'))
@@ -312,15 +312,15 @@ def main():
                 url = s.url
                 url = url.replace('(', '\(')
                 url = url.replace(')', '\)')
-                more = '\n\n[**more here...**]({0} "Compressed to {1}% of original - click to read the full article")\n\n-------------------------------------\n\n'.format(url, compression)
-                print('====================================================')             
+                more = '\n\n[**more here...**]({0} "Compressed to {1}% of original - click to read the full article")\n\n***\n\n'.format(url, compression)
+                print('=====================================================================')             
                 try:
                      post = s.add_comment(extract + more)
                      comment_id = 't1_' + post.id
-                     msg_1 = '  [^(delete)](https://www.reddit.com/message/compose/?to={0}&subject=delete&message=comment id\(s\): {1} "submitter can delete this comment")'.format(bot.name, comment_id)
-                     msg_2 = ' ^| [^(unsubscribe)](https://www.reddit.com/message/compose/?to={0}&subject=unsubscribe&message={1} "unsubscribe the bot from your posts")'.format(bot.name, sub[0])
-                     msg_3 = ' ^| [^(blacklist)](https://www.reddit.com/message/compose/?to={0}&subject=blacklist: {1}&message={2} "blacklist this article\'s website (mods)")'.format(bot.name, sub[0], s.domain)
-                     msg_4 = ' ^| [^(I\'m just a bot)](https://github.com/blackfellas/Summarizer)'
+                     msg_1 = '  [^delete](https://www.reddit.com/message/compose/?to={0}&subject=delete&message=comment id\(s\): {1} "submitter can delete this comment")'.format(bot.name, comment_id)
+                     msg_2 = ' ^| [^unsubscribe](https://www.reddit.com/message/compose/?to={0}&subject=unsubscribe&message={1} "unsubscribe the bot from your posts")'.format(bot.name, sub[0])
+                     msg_3 = ' ^| [^blacklist](https://www.reddit.com/message/compose/?to={0}&subject=blacklist: {1}&message={2} "blacklist this article\'s website (mods)")'.format(bot.name, sub[0], s.domain)
+                     msg_4 = ' ^| [^I\'m ^just ^a ^bot](https://github.com/blackfellas/Summarizer)'
                      post.edit(post.body + msg_1 + msg_2 + msg_3 + msg_4)
                      processed += 1    
                 except Exception as e:
