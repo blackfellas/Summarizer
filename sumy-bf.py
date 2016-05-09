@@ -5,6 +5,8 @@ from __future__ import absolute_import
 from __future__ import division, print_function, unicode_literals
 
 from goose import Goose
+from breadability.readable import Article
+from bs4 import BeautifulSoup
 from sumy.parsers.plaintext import PlaintextParser
 from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.lsa import LsaSummarizer as Summarizer
@@ -23,6 +25,7 @@ global r
 r = None
 r = login()
 session = conn()
+print (datetime.utcnow().strftime("%c"))
 
 #convert time to unix time
 def timestamp(dt, unix=datetime(1970,1,1)):
@@ -30,8 +33,6 @@ def timestamp(dt, unix=datetime(1970,1,1)):
     # return td.total_seconds()
     return (td.microseconds + (td.seconds + td.days * 86400) * 10**6) / 10**6 
 
-
-print (datetime.utcnow().strftime("%c"))
 
 
 def ProcessMessages(bot, last_message):
@@ -130,11 +131,12 @@ def visited(s, bot):
     return False
 
 def check_comment_votes(bot):
+    print ('  checking for downvoted comments')
     comments = bot.get_comments(sort='new', time='all')
     for c in comments:
         try:
             if c.score < 0:
-                print ('  removing downvoted comment ' + c.id )
+                print ('    removing downvoted comment ' + c.id )
                 try: #
                     c.remove()
                 except:
@@ -142,54 +144,62 @@ def check_comment_votes(bot):
         except: #score hidden
             pass        
 
+
+
 def summary(url, length, LANGUAGE):
+    language = LANGUAGE.lower()
     #cookie handling websites like NYT
-    source, e = None, None
     try:
         cj = cookielib.CookieJar()
         opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))  
         response = opener.open(url)
-        raw_html = response.read()    
-    #403 errors...    
-    except Exception as e:     
+        raw_html = response.read()
+        if not raw_html:
+            raise AssertionError('  no response...')
+    except Exception as e:
+        print ('  trying urllib3: ' + str(e))
         try:
             http = urllib3.PoolManager()
             response = http.urlopen('GET', url)
             raw_html = response.data
         except Exception as e:
             return e
-
-    g = Goose()
-    article = g.extract(raw_html=raw_html)
-    meta = article.meta_description if article.meta_description else article.title
-    image = article.top_image
-    if image:
-        pattern = re.compile(r'\S*\.(jpe?g|png|gifv?|tiff)', re.IGNORECASE)
-        match = re.search(pattern, image.src)
-        if match:
-            source = match.group(0)
-    alt = article.opengraph['description'] if article.opengraph['description'] else "image"
-    meta = '[{0}]({1} "{2}")'.format(meta, source, alt) if source else meta
-    text = article.cleaned_text
+    g = Goose() #Goose alone isn't just good enough
+    try:    
+        article = g.extract(raw_html=raw_html)
+        article_text = article.cleaned_text
+        meta = article.meta_description if article.meta_description else article.title
+        alt = article.opengraph['description'] if article.opengraph['description'] else "image" 
+        image = article.top_image
+        source = None
+        if image:
+            pattern = re.compile(r'\S*\.(jpe?g|png|gifv?|tiff)', re.IGNORECASE)
+            match = re.search(pattern, image.src)
+            if match:
+                source = match.group(0)
+        meta = '[{0}]({1} "{2}")'.format(meta, source, alt) if source else meta  
+    except Exception as e:
+        print(' ', str(e))
+        pass
+    html = Article(raw_html).readable
+    soup_text = BeautifulSoup(html, 'lxml').get_text()
+    text = soup_text if len(soup_text) > len(article_text) else article_text
+    parser = PlaintextParser(text, Tokenizer(language)) 
     word_count = len(text.split())
     compression = 100
             
-    language = LANGUAGE.lower()
     stemmer = Stemmer(language)
     summarizer = Summarizer(stemmer)
-    summarizer.stop_words = get_stop_words(language) 
-    parser = PlaintextParser(text, Tokenizer(language))    
-    
+    summarizer.stop_words = get_stop_words(language)        
     short = []
     line = str()
     if word_count >= 500:
-        length = length + int(log(word_count/100))
+        length = length + int(log(word_count/200))
     for sentence in summarizer(parser.document, length):
         line = '>• {0}'.format(str(sentence).decode('utf-8'))
         line = line.replace("`", "\'")
         line = line.replace("#", "\#")
-        short.append(line)  
-        
+        short.append(line)        
     extract = '\n\n'.join(short)
     try:
         compression = int((extract.count(' ')/word_count)*100)
@@ -285,8 +295,8 @@ def main():
                 print ('  blacklisted')
                 continue           
             if visited(s, bot):
-                print ('  already visited')
-                break
+                print ('  already visited this')
+                continue
             try:                
                 result = summary(url, length, language)
                 meta, extract, compression, e = result
@@ -340,7 +350,8 @@ def main():
         cur.execute("update summarize set last_message = %s where subreddit = %s", (last_message, sub[0]))      
     cur.close()
     session.commit()
-    
+    #remove downvoted posts
+    check_comment_votes(bot)
     
 if __name__ == '__main__':
     main()
