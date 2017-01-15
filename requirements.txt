@@ -1,10 +1,7 @@
-praw==3.4.0
-goose-extractor==1.0.25
-urllib3==1.15.1
-psycopg2==2.6.1
-sumy==0.4.1
-numpy==1.10.4
-nltk==3.2
-beautifulsoup4==4.4.1
-breadability==0.1.20
-lxml
+praw==4.2.0
+psycopg2==2.6.2
+sumy==0.5.1
+numpy==1.11.1
+configparser==3.5.0
+newspaper3k==0.1.9
+
