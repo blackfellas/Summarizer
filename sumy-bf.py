@@ -1,19 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from __future__ import absolute_import
-from __future__ import division, print_function, unicode_literals
 
-from goose import Goose
-from breadability.readable import Article
-from bs4 import BeautifulSoup
+from newspaper import Article
+from xreadability import Readability
+from html import unescape
+from unicodedata import normalize
 from sumy.parsers.plaintext import PlaintextParser
 from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.lsa import LsaSummarizer as Summarizer
 from sumy.nlp.stemmers import Stemmer
 from sumy.utils import get_stop_words
 from math import log
-import urllib3, urllib2, cookielib
 import re
 
 from datetime import datetime
@@ -25,7 +23,7 @@ global r
 r = None
 r = login()
 session = conn()
-print (datetime.utcnow().strftime("%c"))
+print (' ', datetime.utcnow().strftime("%c"))
 
 #convert time to unix time
 def timestamp(dt, unix=datetime(1970,1,1)):
@@ -33,186 +31,80 @@ def timestamp(dt, unix=datetime(1970,1,1)):
     # return td.total_seconds()
     return (td.microseconds + (td.seconds + td.days * 86400) * 10**6) / 10**6 
 
-
-
-def ProcessMessages(bot, last_message):
-    #look for thing_id to delete
-    pattern = re.compile(r't1_\S+', re.MULTILINE|re.DOTALL|re.UNICODE)
-    processed = 0
-    new_messages = 0
-    unsubscribe = []
-    blacklist = []
-    
-    try:
-        for message in r.get_inbox():
-            if int(message.created_utc) <= last_message:
-                break
-            if message.was_comment:
-                continue
-            if message.subject.strip().lower() == 'unsubscribe':
-                print('  unsubscribe message from: ', message.author.name)
-                #tuple (user, subreddit as body)
-                unsubscribe.append((message.author.name.lower(), message.body.strip().lower()))
-                continue
-            if 'blacklist:' in message.subject.strip().lower():
-                sub = message.subject.replace('blacklist:', '').strip()
-                if message.author in r.get_moderators(sub):               
-                    print ('  new blacklist message in: ', sub) 
-                    #tuple (blacklist: subreddit as subject, site as body)
-                    blacklist.append((sub.lower(), message.body.strip().lower()))
-                continue           
-            if message.subject.strip().lower() == 'delete':
-                new_messages += 1
-                #obtain a list of ids in comments
-                things = pattern.findall(message.body)
-                if not things:
-                    continue
-                for ids in things:
-                    try:
-                        comment = r.get_info(thing_id=ids)
-                        if (comment.is_root and comment.author.name == bot.name and message.author.name == comment.submission.author.name) or message.author in r.get_moderators(comment.subreddit.display_name):
-                        #try to remove it else delete (if no mod privileges)                        
-                            try:                        
-                                comment.remove()
-                            except:
-                                try:
-                                    comment.delete()
-                                except:
-                                    continue
-                        processed += 1
-                    except: #deleted comment probably
-                        continue
-        print('  new_messages: ' + str(new_messages))
-        print('  deleted: ' + str(processed))
-    except Exception as e:
-        print('  some error:'+ str(e))
-    finally:
-        return set(unsubscribe), set(blacklist)
-
-#blacklist ((or regex) to ignore
-#s - submission
-def blacklist(b_list, e_list, s):
-    domain = s.domain.lower()
-    subreddit = 'self.' + str(s.subreddit.display_name).lower()  
-    if domain == subreddit:
-        return True
-    
-    #convert string to list items
-    b_list = b_list.split() if b_list else []
-    for regex in b_list:
-        regex = regex.strip()
-        if regex == '':
-            continue
-        pattern = re.compile(regex, re.IGNORECASE)
-        if pattern.search(s.domain):
-            print('  regex match: ', pattern.search(s.domain).group(0))
-            return True
-    
-    e_list = e_list.split() if e_list else []
-    for user in e_list:
-        if not user:
-            continue
-        user = user.strip().lower()
-        if s.author.name.lower() == user:
-            print ('  user blacklist: ', user)
-            return True
-    return False
-
-
-#user names made lowercase
-def visited(s, bot):
-    try:
-        for comment in s.comments:
-            if comment.author == bot and comment.is_root:
-                return True 
-    except Exception as e:
-        print(e)
-        return True        
-    return False
-
-def check_comment_votes(bot):
-    print ('  checking for downvoted comments')
-    comments = bot.get_comments(sort='new', time='all')
-    for c in comments:
-        try:
-            if c.score < 0:
-                print ('    removing downvoted comment ' + c.id )
-                try: #
-                    c.remove()
-                except:
-                    c.delete()                   
-        except: #score hidden
-            pass        
-
-
-
 def summary(url, length, LANGUAGE):
     language = LANGUAGE.lower()
-    #cookie handling websites like NYT
-    try:
-        cj = cookielib.CookieJar()
-        opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))  
-        response = opener.open(url)
-        raw_html = response.read()
-        if not raw_html:
-            raise AssertionError('  no response...')
-    except Exception as e:
-        print ('  trying urllib3: ' + str(e))
-        try:
-            http = urllib3.PoolManager()
-            response = http.urlopen('GET', url)
-            raw_html = response.data
-        except Exception as e:
-            return e
-    g = Goose() #Goose alone isn't just good enough
+    e = str() #capture error
+
+    article = Article(url)
     try:    
-        article = g.extract(raw_html=raw_html)
-        article_text = article.cleaned_text
-        meta = article.meta_description if article.meta_description else article.title
-        alt = article.opengraph['description'] if article.opengraph['description'] else "image" 
+        article.download()
+        print ('  successfully d/l')
+        article.parse()
+        raw_html = article.html
         image = article.top_image
-        source = None
-        if image:
-            pattern = re.compile(r'\S*\.(jpe?g|png|gifv?|tiff)', re.IGNORECASE)
-            match = re.search(pattern, image.src)
-            if match:
-                source = match.group(0)
-        meta = '[{0}]({1} "{2}")'.format(meta, source, alt) if source else meta  
+        meta = article.meta_description
+        text = article.text
     except Exception as e:
-        print(' ', str(e))
-        pass
-    html = Article(raw_html).readable
-    soup_text = BeautifulSoup(html, 'lxml').get_text()
-    text = soup_text if len(soup_text) > len(article_text) else article_text
+        print(e)
+ 
+    if not text:
+        print ('  using Readability')
+        raw_text = Readability(raw_html, url)
+        text = raw_text.content
+        article.download(html=text)
+        article.parse()
+        text = article.text
+    if not meta:
+        meta = article.title
+    meta = unescape(unescape(meta))
+    meta = normalize('NFKD', meta)
+    meta = meta.strip()
+    image = image.replace('(', '\(')
+    image = image.replace(')', '\)')
+    image_des = '\n\n> [{0}]({1})'.format("**^pic**", image) if image else None  
+   
     parser = PlaintextParser(text, Tokenizer(language)) 
     word_count = len(text.split())
     compression = 100
+    extra_words = 0
             
     stemmer = Stemmer(language)
     summarizer = Summarizer(stemmer)
     summarizer.stop_words = get_stop_words(language)        
     short = []
     line = str()
-    if word_count >= 500:
-        length = length + int(log(word_count/200))
+    
+    if word_count >= 600:
+        length = length + int(log(word_count/600))
     for sentence in summarizer(parser.document, length):
-        line = '>• {0}'.format(str(sentence).decode('utf-8'))
+        if str(sentence).strip().lower() in meta.lower():
+            extra_words = len(str(sentence).split())
+            continue
+        line = '>• {0}'.format(sentence)
         line = line.replace("`", "\'")
         line = line.replace("#", "\#")
-        short.append(line)        
+        short.append(line)
+       
     extract = '\n\n'.join(short)
+    extract = extract + image_des if image_des else extract
+    meta = meta.replace('#', '\#')
+    if len(meta) > 400:
+       lpoint = meta.rfind('.', 0, 400)
+       if lpoint == -1:
+           meta = meta[:(meta.rfind(' ', 0, 400))] + '...'
+       else:
+           meta = meta[:(meta.rfind('.', 0, 400))] + '...'
+              
     try:
-        compression = int((extract.count(' ')/word_count)*100)
-        print(" ", len(text), 'chars in text. keypoints:', length)
-    except:
-        pass
+        compression = int(((extract.count(' ')+extra_words)/word_count)*100)
+    except Exception as numerror:
+        print(numerror)
     print('  from {0} words to {1} words ({2}%)'.format(word_count, len(extract.split()), compression))
     return (meta, extract, compression, e)
     
-
-
+        
 def main():
-    bot = r.get_me()
+    bot = r.user.me()
     
     # connect to db and get data
     cur = session.cursor()
@@ -239,7 +131,7 @@ def main():
         # do the subs from the db table
         print ('\nProcessing', sub[0], '...')
         now = datetime.utcnow()
-        current_sub = r.get_subreddit(sub[0])        
+        current_sub = r.subreddit(sub[0])        
         #database table summarize
         length = sub[1] #number of keypoints in summary
         b_list = sub[2] #blacklisted websites
@@ -274,9 +166,9 @@ def main():
         b_list = '\r\n'.join(b_list)        
   
         try:
-            submissions = current_sub.get_new(limit=LIMIT, fetch=True)
+            submissions = current_sub.new(limit=LIMIT)
         except Exception as h:
-            print('Ugh! Reddit', h)
+            print('  Oops! Reddit is down', h)
             sleep(60)
             continue       
         for s in submissions:
@@ -288,10 +180,8 @@ def main():
             if s.created_utc <= last_run:
                 print ('  reached end of last run')
                 break
-            #give a fellow bot a fist 
-            if s.author.name.lower() == 'automoderator':
-                    s.vote(1)               
-            if blacklist(b_list, e_list, s):
+ 
+            if blacklist(b_list, s):
                 print ('  blacklisted')
                 continue           
             if visited(s, bot):
@@ -302,36 +192,38 @@ def main():
                 meta, extract, compression, e = result
                 if hasattr(e, 'code'):
                     if e.code == 404:
-                        s.set_flair(flair_text='404: dead link')
-                        continue
+                        try:
+                            s.add_comment("This link appears to be dead, Jim.")
+                            s.set_flair(flair_text='404: dead link')
+                        except:
+                            continue
                 #check compression
                 if compression > 60:
-                    print ('  Big Summary:\n', extract.encode('utf-8'))
+                    print ('  Big Summary:\n', extract)
                     continue
                 #check extracted text length
-                if len(extract.split()) <= 128:
-                    print ('  Too short!')
+                if len(extract.split()) < 80:
+                    print ('  Too short!\n ', extract)
                     continue              
-                #formatting for reddit markup, add meta description
                 extract = '{0}\n\n***\n{1}'.format(meta, extract)
                 print ('\n')
                 print (' ', s.title, '-', s.domain)
-                print (' ', extract.encode('utf-8'))
+                print (' ', extract)
                 
                 #more reddit mark up
                 url = s.url
                 url = url.replace('(', '\(')
                 url = url.replace(')', '\)')
-                more = '\n\n[**more here...**]({0} "Compressed to {1}% of original - click to read the full article")\n\n***\n\n'.format(url, compression)
-                print('=====================================================================')             
+                more = ' [**^^full ^^story** ^^|]({0} "Compressed to {1}% of original - click to read the full article")'.format(url, compression)
+                print('='*70)             
                 try:
-                     post = s.add_comment(extract + more)
+                     post = s.reply(extract + '\n\n***\n\n')
                      comment_id = 't1_' + post.id
-                     msg_1 = '  [^delete](https://www.reddit.com/message/compose/?to={0}&subject=delete&message=comment id\(s\): {1} "submitter can delete this comment")'.format(bot.name, comment_id)
-                     msg_2 = ' ^| [^unsubscribe](https://www.reddit.com/message/compose/?to={0}&subject=unsubscribe&message={1} "unsubscribe the bot from your posts")'.format(bot.name, sub[0])
-                     msg_3 = ' ^| [^blacklist](https://www.reddit.com/message/compose/?to={0}&subject=blacklist: {1}&message={2} "blacklist this article\'s website (mods)")'.format(bot.name, sub[0], s.domain)
-                     msg_4 = ' ^| [^I\'m ^just ^a ^bot](https://github.com/blackfellas/Summarizer)'
-                     post.edit(post.body + msg_1 + msg_2 + msg_3 + msg_4)
+                     msg_1 = '  [^^(**delete**)](https://www.reddit.com/message/compose/?to={0}&subject=delete&message=comment id\(s\): {1} "submitter can delete this comment")'.format(bot.name, comment_id)
+                     msg_2 = ' ^^| [^^(**blacklist**)](https://www.reddit.com/message/compose/?to={0}&subject=blacklist: {1}&message={2} "blacklist this article\'s website (mods)")'.format(bot.name, sub[0], s.domain)
+                     msg_3 = ' ^^| [^^(**github**)](https://github.com/blackfellas/Summarizer "I\'m just a bot")'
+                     msg_4 = ' ^^| [^^(**theory**)](https://en.wikipedia.org/wiki/Latent_semantic_analysis)\n' #|-|-|-|-|
+                     post.edit(post.body + more + msg_1 + msg_2 + msg_3 + msg_4)
                      processed += 1    
                 except Exception as e:
                     print('  ' + str(e))
@@ -352,6 +244,117 @@ def main():
     session.commit()
     #remove downvoted posts
     check_comment_votes(bot)
+
+def ProcessMessages(bot, last_message):
+    #look for thing_id to delete
+    pattern = re.compile(r't1_\S+', re.MULTILINE|re.DOTALL|re.UNICODE)
+    processed = 0
+    new_messages = 0
+    unsubscribe = []
+    blacklist = []
+    
+    try:
+        for message in r.inbox.messages():
+            message.mark_read()
+            if int(message.created_utc) <= last_message:
+                break
+            if message.was_comment:
+                continue
+            if message.subject.strip().lower() == 'unsubscribe':
+                print('  unsubscribe message from: ', message.author.name)
+                #tuple (user, subreddit as body)
+                unsubscribe.append((message.author.name.lower(), message.body.strip().lower()))
+                continue
+            if 'blacklist:' in message.subject.strip().lower():
+                sub = message.subject.replace('blacklist:', '').strip()
+                sub = r.subreddit(sub)
+                if message.author in sub.moderator:               
+                    print ('  new blacklist message in: ', sub) 
+                    #tuple (blacklist: subreddit as subject, site as body)
+                    blacklist.append((sub.lower(), message.body.strip().lower()))
+                continue           
+            if message.subject.strip().lower() == 'delete':
+                new_messages += 1
+                #obtain a list of ids in comments
+                things = pattern.findall(message.body)
+                if not things:
+                    continue
+
+                for ids in things:
+                    try:
+                        comment = r.comment(ids)
+                        sub = comment.subreddit
+                        if (comment.is_root and comment.author.name == bot.name and message.author.name == comment.submission.author.name) or (message.author in sub.moderator):
+                        #try to remove it else delete (if no mod privileges)                        
+                            try:                        
+                                comment.remove()
+                            except:
+                                try:
+                                    comment.delete()
+                                except:
+                                    continue
+                        processed += 1
+                    except: #deleted comment probably
+                        continue
+
+        print('  new_messages: ' + str(new_messages))
+        print('  deleted: ' + str(processed))
+    except Exception as e:
+        print('  some error:'+ str(e))
+    finally:
+        return set(unsubscribe), set(blacklist)
+
+#blacklist ((or regex) to ignore
+#s - submission
+def blacklist(b_list, s):
+    domain = s.domain.lower()
+    subreddit = 'self.' + str(s.subreddit.display_name).lower()  
+    if domain == subreddit:
+        return True
+    
+    #convert string to list items
+    b_list = b_list.split() if b_list else []
+    for regex in b_list:
+        regex = regex.strip()
+        if regex == '':
+            continue
+        pattern = re.compile(regex, re.IGNORECASE)
+        if pattern.search(s.domain):
+            print('  regex match: ', pattern.search(s.domain).group(0))
+            return True
+    return False
+
+
+#user names made lowercase
+def visited(s, bot):
+    try:
+        for comment in s.comments:
+            if comment.author == bot and comment.is_root:
+                return True 
+    except Exception as e:
+        print(e)
+        return True        
+    return False
+
+def check_comment_votes(bot):
+    print ('  checking for downvoted comments')
+    comments = bot.comments.new()
+    for c in comments:
+        try:
+            if c.score < 0:
+                if c.edited or c.approved: #manually edited
+                    continue
+                print ('    removing downvoted comment ' + c.id )
+                try: #to remove else delete
+                    c.remove()
+                except:
+                    c.delete()                   
+        except: #score hidden
+            pass        
+
+
+
+
     
 if __name__ == '__main__':
     main()
