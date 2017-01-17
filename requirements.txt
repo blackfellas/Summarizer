@@ -4,4 +4,3 @@ sumy==0.5.1
 numpy==1.11.1
 configparser==3.5.0
 newspaper3k==0.1.9
-
