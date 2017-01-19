@@ -254,7 +254,7 @@ def ProcessMessages(bot, last_message):
     blacklist = []
     
     try:
-        for message in r.inbox.messages():
+        for message in r.inbox.all():
             message.mark_read()
             if int(message.created_utc) <= last_message:
                 break
