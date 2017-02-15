@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Thu Dec 29 16:47:16 2016
 
-@author: omeiza
-"""
 
 #coding=utf-8
 
