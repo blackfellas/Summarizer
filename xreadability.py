@@ -3,11 +3,6 @@
 
 #coding=utf-8
 
-# author: kingwkb
-# blog : http://yanghao.org/blog/
-#
-# this is code demo: http://yanghao.org/tools/readability
-
 from __future__ import division
 import os
 import sys
